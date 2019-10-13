@@ -2,5 +2,9 @@
 <classpath>
 	<classpathentry kind="src" path="src"/>
 	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER"/>
+	<classpathentry kind="lib" path="C:/Users/Théo/Downloads/bcprov-jdk15to18-164.jar"/>
+	<classpathentry kind="lib" path="C:/Users/Théo/Downloads/bcpg-jdk15to18-164.jar"/>
+	<classpathentry kind="lib" path="C:/Users/Théo/Downloads/jce-jdk13-164.jar"/>
+	<classpathentry kind="lib" path="C:/Users/Théo/Downloads/bcpkix-jdk15on-160.jar"/>
 	<classpathentry kind="output" path="bin"/>
 </classpath>
