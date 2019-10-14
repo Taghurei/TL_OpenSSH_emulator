@@ -36,12 +36,12 @@ public class Equipement {
 
 	public void affichage_da() {
 		// Affichage de la liste des équipements de DA.
-		System.out.println("Affichage des Autorités de Certification");
+		System.out.println("Affichage des Autorités Dérivées");
 	}
 
 	public void affichage_ca() {
 		// Affichage de la liste des équipements de CA.
-		System.out.println("Affichage des Autorités Dérivées");
+		System.out.println("Affichage des Autorités de Certification");
 	}
 
 	public void affichage() {
