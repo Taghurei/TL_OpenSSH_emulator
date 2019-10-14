@@ -23,17 +23,10 @@ public class Certificat {
 	static private BigInteger seqnum = BigInteger.ZERO;
 	public X509CertificateHolder x509holder;
 
-	Certificat(String nom, PaireClesRSA cle, int validityDays) {
-		// Constructeur d’un certificat auto-signé avec
-		// CN = nom, la clé publique contenu dans PaireClesRSA,
-		// la durée de validité.
-
+	Certificat(String issuerName, String subjectName, PrivateKey privkey, PublicKey pubkey, int validityDays) {
 		// Déclare le fournisseur BouncyCastke aka "BC"
 		Security.addProvider(new BouncyCastleProvider());
 
-		// On recupere la cle publique et la cle privee :
-		PublicKey pubkey = cle.Publique();
-		PrivateKey privkey = cle.Privee();
 		// On cree la structure qui va contenir la signature :
 		ContentSigner sigGen = null;
 		try {
@@ -45,8 +38,8 @@ public class Certificat {
 		SubjectPublicKeyInfo subPubKeyInfo = SubjectPublicKeyInfo.getInstance(pubkey.getEncoded());
 		// Le nom du proprietaire et du certifieur :
 		// ici, les memes car auto-signe.
-		X500Name issuer = new X500Name("CN=" + nom);
-		X500Name subject = new X500Name("CN=" + nom);
+		X500Name issuer = new X500Name("CN=" + issuerName);
+		X500Name subject = new X500Name("CN=" + subjectName);
 		// Le numero de serie du futur certificat
 		seqnum = seqnum.add(BigInteger.ONE);
 		// Le certificat sera valide a partir d’hier ...
@@ -60,6 +53,13 @@ public class Certificat {
 		X509CertificateHolder x509holder = v1CertGen.build(sigGen);
 
 		this.x509holder = x509holder;
+	}
+
+	Certificat(String nom, PaireClesRSA cle, int validityDays) {
+		// Constructeur d’un certificat auto-signé avec
+		// CN = nom, la clé publique contenu dans PaireClesRSA,
+		// la durée de validité.
+		this(nom, nom, cle.Privee(), cle.Publique(), validityDays);
 	}
 
 	public X509Certificate getCertificate() throws CertificateException {
