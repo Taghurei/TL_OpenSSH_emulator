@@ -1,5 +1,5 @@
 *.class
-
+*.classpath
 # BlueJ files
 *.ctxt
 
@@ -40,3 +40,4 @@ $RECYCLE.BIN/
 
 # Windows shortcuts
 *.lnk
+/bin/
