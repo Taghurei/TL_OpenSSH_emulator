@@ -75,7 +75,6 @@ public class Certificat {
 		try {
 			verifier = new JcaContentVerifierProviderBuilder().setProvider("BC").build(pubKey);
 		} catch (OperatorCreationException e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
 		// Verification d’un certificat !

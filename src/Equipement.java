@@ -36,10 +36,12 @@ public class Equipement {
 
 	public void affichage_da() {
 		// Affichage de la liste des équipements de DA.
+		System.out.println("Affichage des Autorités de Certification");
 	}
 
 	public void affichage_ca() {
 		// Affichage de la liste des équipements de CA.
+		System.out.println("Affichage des Autorités Dérivées");
 	}
 
 	public void affichage() {
@@ -47,11 +49,11 @@ public class Equipement {
 		// de l’équipement.
 		System.out.println("Je suis " + monNom + " et j'écoute sur le port " + monPort);
 		System.out.println("Clé publique: " + maCle.Publique());
-		
+
 		// Certif perso
 		System.out.println("Mon certificat:");
 		System.out.println(monCertif());
-		
+
 		// Certif connus
 		this.affichage_ca();
 		this.affichage_da();
@@ -70,5 +72,13 @@ public class Equipement {
 	public X509Certificate monCertif() {
 		// Recuperation du certificat auto-signé.
 		return this.monCert;
+	}
+
+	public void server() {
+		System.out.println("Je suis un server");
+	}
+
+	public void client() {
+		System.out.println("Je suis un client");
 	}
 }
