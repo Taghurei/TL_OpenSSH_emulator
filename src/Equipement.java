@@ -1,3 +1,10 @@
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
+import java.io.OutputStream;
+import java.net.ServerSocket;
+import java.net.Socket;
 import java.security.PublicKey;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
@@ -75,10 +82,148 @@ public class Equipement {
 	}
 
 	public void server() {
-		System.out.println("Je suis un server");
+		System.out.println("Je suis un serveur (" + this.monNom + ") qui écoute sur " + this.monPort);
+
+		ServerSocket serverSocket = null;
+		Socket NewServerSocket = null;
+		InputStream NativeIn = null;
+		ObjectInputStream ois = null;
+		OutputStream NativeOut = null;
+		ObjectOutputStream oos = null;
+
+		// Creation de socket (TCP)
+		try {
+			serverSocket = new ServerSocket(this.monPort);
+		} catch (IOException e) {
+			// Gestion des exceptions
+		}
+
+		// Attente de connextions
+		try {
+			NewServerSocket = serverSocket.accept();
+		} catch (IOException e1) {
+			// TODO Auto-generated catch block
+			e1.printStackTrace();
+		}
+
+		System.out.println("Je suis connecté");
+
+		// Creation des flux natifs et evolues
+		try {
+			NativeIn = NewServerSocket.getInputStream();
+			ois = new ObjectInputStream(NativeIn);
+			NativeOut = NewServerSocket.getOutputStream();
+			oos = new ObjectOutputStream(NativeOut);
+		} catch (IOException e) {
+			// Gestion des exceptions
+		}
+
+		// Reception d’un String
+		try {
+			String res = (String) ois.readObject();
+			System.out.println("Je reçois:" + res);
+		} catch (ClassNotFoundException | IOException e1) {
+			// TODO Auto-generated catch block
+			e1.printStackTrace();
+		}
+
+		// Emission d’un String
+		try {
+			oos.writeObject("Au revoir");
+			oos.flush();
+		} catch (IOException e1) {
+			// TODO Auto-generated catch block
+			e1.printStackTrace();
+		}
+
+		// Fermeture des flux evolues et natifs
+		try {
+			ois.close();
+			oos.close();
+			NativeIn.close();
+			NativeOut.close();
+		} catch (IOException e) {
+			// Gestion des exceptions
+		}
+
+		// Fermeture de la connexion
+		try {
+			NewServerSocket.close();
+		} catch (IOException e) {
+			// Gestion des exceptions
+		}
+
+		// Arret du serveur
+		try {
+			serverSocket.close();
+		} catch (IOException e) {
+			// Gestion des exceptions
+		}
 	}
 
-	public void client() {
-		System.out.println("Je suis un client");
+	public void client(String ServerName, int ServerPort) {
+		System.out.println("Je me connecte en tant que client à " + ServerName + " port " + ServerPort);
+		Socket clientSocket = null;
+		InputStream NativeIn = null;
+		ObjectInputStream ois = null;
+		OutputStream NativeOut = null;
+		ObjectOutputStream oos = null;
+
+		// Creation de socket (TCP)
+		try {
+			clientSocket = new Socket(ServerName, ServerPort);
+		} catch (IOException e1) {
+			// TODO Auto-generated catch block
+			e1.printStackTrace();
+		}
+
+		System.out.println("Je suis connecté");
+
+		// Creation des flux natifs et evolues
+		try {
+			NativeOut = clientSocket.getOutputStream();
+			oos = new ObjectOutputStream(NativeOut);
+			NativeIn = clientSocket.getInputStream();
+			ois = new ObjectInputStream(NativeIn);
+		} catch (IOException e1) {
+			// TODO Auto-generated catch block
+			e1.printStackTrace();
+		}
+
+		// Emission d’un String
+		try {
+			oos.writeObject("Bonjour, je suis " + this.monNom);
+			oos.flush();
+		} catch (IOException e1) {
+			// TODO Auto-generated catch block
+			e1.printStackTrace();
+		}
+
+		// Reception d’un String
+		String res;
+		try {
+			res = (String) ois.readObject();
+			System.out.println("Je reçois:" + res);
+		} catch (ClassNotFoundException | IOException e1) {
+			// TODO Auto-generated catch block
+			e1.printStackTrace();
+		}
+
+		// Fermeture des flux evolues et natifs
+		try {
+			ois.close();
+			oos.close();
+			NativeIn.close();
+			NativeOut.close();
+		} catch (IOException e) {
+			// Gestion des exceptions
+		}
+
+		// Fermeture de la connexion
+		try {
+			clientSocket.close();
+		} catch (IOException e) {
+			// Gestion des exceptions
+		}
 	}
 }

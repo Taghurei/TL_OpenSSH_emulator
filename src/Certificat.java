@@ -79,10 +79,10 @@ public class Certificat {
 		}
 		// Verification d’un certificat !
 		if (!x509holder.isSignatureValid(verifier)) {
-			System.err.println("signature invalid");
+			System.err.println("signature invalide");
 			return false;
 		} else {
-			System.out.println("signature valid");
+			System.out.println("signature valide");
 			return true;
 		}
 	}
