@@ -8,7 +8,9 @@ import java.net.Socket;
 import java.security.PublicKey;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
+import java.util.HashSet;
 import java.util.Scanner;
+import java.util.Set;
 
 import org.bouncycastle.cert.CertException;
 import java.util.Scanner;
@@ -19,7 +21,9 @@ public class Equipement {
 	private X509Certificate monCert; // Le certificat auto-signe.
 	private String monNom; // Identite de l’equipement.
 	private int monPort; // Le numéro de port d’ecoute.
+    Set<String> listCA = new HashSet<String>(); 
 
+	private Set<String> listDA;
 	Equipement(String nom, int port) {
 		// Constructeur de l’equipement identifie par nom
 		// et qui « écoutera » sur le port port.
@@ -42,15 +46,16 @@ public class Equipement {
 		}
 
 	}
-
 	public void affichage_da() {
 		// Affichage de la liste des équipements de DA.
 		System.out.println("Affichage des Autorités Dérivées");
+        System.out.println(listDA); 
 	}
 
 	public void affichage_ca() {
 		// Affichage de la liste des équipements de CA.
 		System.out.println("Affichage des Autorités de Certification");
+        System.out.println(listCA); 
 	}
 
 	public void affichage() {
@@ -121,11 +126,11 @@ public class Equipement {
 		} catch (IOException e) {
 			// Gestion des exceptions
 		}
-
+		String nameClient = "";
 		// Reception d’un String
 		try {
-			String res = (String) ois.readObject();
-			System.out.println("le client suivant souhaite se connecter:" + res);
+			nameClient = (String) ois.readObject();
+			System.out.println("le client suivant souhaite se connecter:" + nameClient);
 		} catch (ClassNotFoundException | IOException e1) {
 			// TODO Auto-generated catch block
 			e1.printStackTrace();
@@ -133,7 +138,7 @@ public class Equipement {
 
 		// Emission d’un String
 		try {
-			oos.writeObject("Je suis le serveur : " + this.monNom);
+			oos.writeObject(this.monNom);
 			oos.flush();
 		} catch (IOException e1) {
 			// TODO Auto-generated catch block
@@ -154,6 +159,7 @@ public class Equipement {
 						if (res.equals("connexion acceptée")) {
 							System.out.println("Nous avons tous les 2 accepté la connexion"
 									+ " nous pouvons echanger nos certificats");
+							listCA.add(nameClient);
 						} else {
 							System.out.println("le serveur a refusé la connexion");
 						}
@@ -239,7 +245,7 @@ public class Equipement {
 
 		// Emission d’un String
 		try {
-			oos.writeObject("je suis le client:  " + this.monNom);
+			oos.writeObject(this.monNom);
 			oos.flush();
 		} catch (IOException e1) {
 			// TODO Auto-generated catch block
@@ -271,6 +277,7 @@ public class Equipement {
 							System.out.println("Nous avons tous les 2 accepté la connexion"
 									+ " nous pouvons echanger nos certificats");
 						}
+						listCA.add(ServerName);
 					} catch (ClassNotFoundException | IOException e1) {
 						// TODO Auto-generated catch block
 						e1.printStackTrace();
