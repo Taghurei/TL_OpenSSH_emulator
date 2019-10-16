@@ -1,3 +1,4 @@
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.ObjectInputStream;
@@ -15,6 +16,7 @@ public class Equipement {
 
 	private PaireClesRSA maCle; // La paire de cle de l’equipement.
 	private X509Certificate monCert; // Le certificat auto-signe.
+	private CertificatHolder monCertHolder;
 	private String monNom; // Identite de l’equipement.
 	private int monPort; // Le numéro de port d’ecoute.
 
@@ -25,20 +27,20 @@ public class Equipement {
 		this.monNom = nom;
 		this.monPort = port;
 		this.maCle = new PaireClesRSA();
-		Certificat certif = new Certificat(nom, maCle, 10);
+		CertificatHolder certifHolder = new CertificatHolder(nom, maCle, 10);
+		this.monCertHolder = certifHolder;
 
 		try {
-			certif.verifCertif(maCle.Publique());
+			certifHolder.verifCertif(maCle.Publique());
 		} catch (CertException e) {
 			System.err.println("Certificat non valide");
 			e.printStackTrace();
 		}
 		try {
-			this.monCert = certif.getCertificate();
+			this.monCert = certifHolder.getCertificate();
 		} catch (CertificateException e) {
 			e.printStackTrace();
 		}
-
 	}
 
 	public void affichage_da() {
@@ -54,12 +56,12 @@ public class Equipement {
 	public void affichage() {
 		// Affichage de l’ensemble des informations
 		// de l’équipement.
-		System.out.println("Je suis " + monNom + " et j'écoute sur le port " + monPort);
-		System.out.println("Clé publique: " + maCle.Publique());
+		System.out.println("Je suis " + this.monNom + " et j'écoute sur le port " + this.monPort);
+		System.out.println("Clé publique: " + this.maCle.Publique());
 
 		// Certif perso
 		System.out.println("Mon certificat:");
-		System.out.println(monCertif());
+		System.out.println(monCert());
 
 		// Certif connus
 		this.affichage_ca();
@@ -76,7 +78,7 @@ public class Equipement {
 		return this.maCle.Publique();
 	}
 
-	public X509Certificate monCertif() {
+	public X509Certificate monCert() {
 		// Recuperation du certificat auto-signé.
 		return this.monCert;
 	}
@@ -101,12 +103,11 @@ public class Equipement {
 		// Attente de connextions
 		try {
 			NewServerSocket = serverSocket.accept();
+			System.out.println("Je suis connecté");
 		} catch (IOException e1) {
 			// TODO Auto-generated catch block
 			e1.printStackTrace();
 		}
-
-		System.out.println("Je suis connecté");
 
 		// Creation des flux natifs et evolues
 		try {
@@ -129,7 +130,9 @@ public class Equipement {
 
 		// Emission d’un String
 		try {
-			oos.writeObject("Au revoir");
+			System.out.println(
+					" J'envoie mon cert au format PEM \n qui juste un DER en base64 avec un header et un footer jolie");
+			oos.writeObject(this.monCertHolder.cert2PEM());
 			oos.flush();
 		} catch (IOException e1) {
 			// TODO Auto-generated catch block
@@ -172,12 +175,11 @@ public class Equipement {
 		// Creation de socket (TCP)
 		try {
 			clientSocket = new Socket(ServerName, ServerPort);
+			System.out.println("Je suis connecté");
 		} catch (IOException e1) {
 			// TODO Auto-generated catch block
 			e1.printStackTrace();
 		}
-
-		System.out.println("Je suis connecté");
 
 		// Creation des flux natifs et evolues
 		try {
@@ -200,11 +202,18 @@ public class Equipement {
 		}
 
 		// Reception d’un String
-		String res;
+		String res = null;
 		try {
 			res = (String) ois.readObject();
-			System.out.println("Je reçois:" + res);
-		} catch (ClassNotFoundException | IOException e1) {
+		} catch (ClassNotFoundException | IOException e2) {
+			// TODO Auto-generated catch block
+			e2.printStackTrace();
+		}
+		try {
+			CertificatHolder certHold = new CertificatHolder(res);
+			System.out.println("Je suis capable d'afficher le certificat que j'ai reçu");
+			System.out.println(certHold.getCertificate());
+		} catch (CertificateException e1) {
 			// TODO Auto-generated catch block
 			e1.printStackTrace();
 		}

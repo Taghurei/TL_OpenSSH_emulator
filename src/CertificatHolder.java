@@ -1,3 +1,6 @@
+import java.io.IOException;
+import java.io.StringReader;
+import java.io.StringWriter;
 import java.math.BigInteger;
 import java.security.PrivateKey;
 import java.security.PublicKey;
@@ -13,17 +16,19 @@ import org.bouncycastle.cert.X509CertificateHolder;
 import org.bouncycastle.cert.X509v1CertificateBuilder;
 import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
+import org.bouncycastle.openssl.PEMParser;
+import org.bouncycastle.openssl.jcajce.JcaPEMWriter;
 import org.bouncycastle.operator.ContentSigner;
 import org.bouncycastle.operator.ContentVerifierProvider;
 import org.bouncycastle.operator.OperatorCreationException;
 import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
 import org.bouncycastle.operator.jcajce.JcaContentVerifierProviderBuilder;
 
-public class Certificat {
+public class CertificatHolder {
 	static private BigInteger seqnum = BigInteger.ZERO;
 	public X509CertificateHolder x509holder;
 
-	Certificat(String issuerName, String subjectName, PrivateKey privkey, PublicKey pubkey, int validityDays) {
+	CertificatHolder(String issuerName, String subjectName, PrivateKey privkey, PublicKey pubkey, int validityDays) {
 		// Déclare le fournisseur BouncyCastke aka "BC"
 		Security.addProvider(new BouncyCastleProvider());
 
@@ -55,7 +60,7 @@ public class Certificat {
 		this.x509holder = x509holder;
 	}
 
-	Certificat(String nom, PaireClesRSA cle, int validityDays) {
+	CertificatHolder(String nom, PaireClesRSA cle, int validityDays) {
 		// Constructeur d’un certificat auto-signé avec
 		// CN = nom, la clé publique contenu dans PaireClesRSA,
 		// la durée de validité.
@@ -84,6 +89,31 @@ public class Certificat {
 		} else {
 			System.out.println("signature valide");
 			return true;
+		}
+	}
+
+	public String cert2PEM() throws IOException {
+		final StringWriter writer = new StringWriter();
+		final JcaPEMWriter pemWriter = new JcaPEMWriter(writer);
+		try {
+			pemWriter.writeObject(this.getCertificate());
+		} catch (CertificateException e) {
+			e.printStackTrace();
+		}
+		pemWriter.flush();
+		pemWriter.close();
+		return writer.toString();
+	}
+
+	public CertificatHolder(String pemString) throws CertificateException {
+		try {
+			Security.addProvider(new BouncyCastleProvider());
+			PEMParser pemParser = new PEMParser(new StringReader(pemString));
+			Object object = pemParser.readObject();
+			this.x509holder = (X509CertificateHolder) object;
+			pemParser.close();
+		} catch (Exception e) {
+			throw new RuntimeException("Could not load key pair", e);
 		}
 	}
 }
