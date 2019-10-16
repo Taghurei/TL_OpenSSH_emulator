@@ -30,13 +30,16 @@ public class Main {
 				equipement.server();
 				break;
 			case "c":
-				equipement.client();
+				System.out.println("Nom du server et numéro de port ?");
+				String serverName = scan.next();
+				int serverPort = scan.nextInt();
+				equipement.client(serverName, serverPort);
 				break;
 			case "r": // Reseau domestique
 				equipement.affichage_ca();
 				equipement.affichage_da();
 				break;
-				
+
 			case "help":
 			case "h":
 				System.out.println("q => Quitter");
