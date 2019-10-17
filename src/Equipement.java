@@ -9,6 +9,9 @@ import java.net.Socket;
 import java.security.PublicKey;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
+import java.util.HashSet;
+import java.util.Scanner;
+import java.util.Set;
 
 import org.bouncycastle.cert.CertException;
 
@@ -19,6 +22,9 @@ public class Equipement {
 	private CertificatHolder monCertHolder;
 	private String monNom; // Identite de l’equipement.
 	private int monPort; // Le numéro de port d’ecoute.
+	Set<String> listCA = new HashSet<String>();
+
+	private Set<String> listDA;
 
 	Equipement(String nom, int port) {
 		// Constructeur de l’equipement identifie par nom
@@ -45,12 +51,14 @@ public class Equipement {
 
 	public void affichage_da() {
 		// Affichage de la liste des équipements de DA.
-		System.out.println("Affichage des Autorités de Certification");
+		System.out.println("Affichage des Autorités Dérivées");
+		System.out.println(listDA);
 	}
 
 	public void affichage_ca() {
 		// Affichage de la liste des équipements de CA.
-		System.out.println("Affichage des Autorités Dérivées");
+		System.out.println("Affichage des Autorités de Certification");
+		System.out.println(listCA);
 	}
 
 	public void affichage() {
@@ -84,6 +92,10 @@ public class Equipement {
 	}
 
 	public void server() {
+		// used later in server
+		@SuppressWarnings("resource")
+		Scanner scan = new Scanner(System.in);
+
 		System.out.println("Je suis un serveur (" + this.monNom + ") qui écoute sur " + this.monPort);
 
 		ServerSocket serverSocket = null;
@@ -105,10 +117,10 @@ public class Equipement {
 			NewServerSocket = serverSocket.accept();
 			System.out.println("Je suis connecté");
 		} catch (IOException e1) {
-			// TODO Auto-generated catch block
 			e1.printStackTrace();
 		}
 
+		System.out.println("J'ai reçu une connexion");
 		// Creation des flux natifs et evolues
 		try {
 			NativeIn = NewServerSocket.getInputStream();
@@ -119,12 +131,12 @@ public class Equipement {
 			// Gestion des exceptions
 		}
 
+		String nameClient = "";
 		// Reception d’un String
 		try {
-			String res = (String) ois.readObject();
-			System.out.println("Je reçois:" + res);
+			nameClient = (String) ois.readObject();
+			System.out.println("le client suivant souhaite se connecter:" + nameClient);
 		} catch (ClassNotFoundException | IOException e1) {
-			// TODO Auto-generated catch block
 			e1.printStackTrace();
 		}
 
@@ -134,9 +146,54 @@ public class Equipement {
 					" J'envoie mon cert au format PEM \n qui juste un DER en base64 avec un header et un footer jolie");
 			oos.writeObject(this.monCertHolder.cert2PEM());
 			oos.flush();
+
+			System.out.println("Et j'envoie mon nom ensuite");
+			oos.writeObject(this.monNom);
+			oos.flush();
 		} catch (IOException e1) {
-			// TODO Auto-generated catch block
 			e1.printStackTrace();
+		}
+		ConnexionClient: while (true) {
+			System.out.println("On imagine ici que je n'ai pas le certificat (a implementer)");
+			System.out.println("Voulez vous accepter la connexion entrante? (y/n)");
+			String accept = scan.next();
+			switch (accept) {
+			case "y":
+				try {
+					oos.writeObject("connexion acceptée");
+					oos.flush();
+					try {
+						String res = (String) ois.readObject();
+						System.out.println("le client a donné la réponse suivante:" + res);
+						if (res.equals("connexion acceptée")) {
+							System.out.println("Nous avons tous les 2 accepté la connexion"
+									+ " nous pouvons echanger nos certificats");
+							listCA.add(nameClient);
+						} else {
+							System.out.println("le serveur a refusé la connexion");
+						}
+					} catch (ClassNotFoundException | IOException e1) {
+						System.out.println("echec de connexion");
+						e1.printStackTrace();
+					}
+				} catch (IOException e1) {
+					e1.printStackTrace();
+				}
+				// Cas ou l'utilisateur accepte la connexion
+				break ConnexionClient;
+			case "n":
+				try {
+					oos.writeObject("connexion refusée");
+					oos.flush();
+					System.out.println("J'ai refusé la connexion" + " nous n'echangeons pas nos certificats");
+				} catch (IOException e1) {
+					e1.printStackTrace();
+				}
+				break ConnexionClient;
+			default:
+				System.out.println("Commande inconnue");
+				break;
+			}
 		}
 
 		// Fermeture des flux evolues et natifs
@@ -146,25 +203,28 @@ public class Equipement {
 			NativeIn.close();
 			NativeOut.close();
 		} catch (IOException e) {
-			// Gestion des exceptions
+			e.printStackTrace();
 		}
 
 		// Fermeture de la connexion
 		try {
 			NewServerSocket.close();
 		} catch (IOException e) {
-			// Gestion des exceptions
+			e.printStackTrace();
 		}
 
 		// Arret du serveur
 		try {
 			serverSocket.close();
 		} catch (IOException e) {
-			// Gestion des exceptions
+			e.printStackTrace();
 		}
 	}
 
 	public void client(String ServerName, int ServerPort) {
+		// used later in client
+		@SuppressWarnings("resource")
+		Scanner scan = new Scanner(System.in);
 		System.out.println("Je me connecte en tant que client à " + ServerName + " port " + ServerPort);
 		Socket clientSocket = null;
 		InputStream NativeIn = null;
@@ -177,9 +237,10 @@ public class Equipement {
 			clientSocket = new Socket(ServerName, ServerPort);
 			System.out.println("Je suis connecté");
 		} catch (IOException e1) {
-			// TODO Auto-generated catch block
 			e1.printStackTrace();
 		}
+
+		System.out.println("Tentative de connexion...");
 
 		// Creation des flux natifs et evolues
 		try {
@@ -188,34 +249,77 @@ public class Equipement {
 			NativeIn = clientSocket.getInputStream();
 			ois = new ObjectInputStream(NativeIn);
 		} catch (IOException e1) {
-			// TODO Auto-generated catch block
 			e1.printStackTrace();
 		}
 
 		// Emission d’un String
 		try {
-			oos.writeObject("Bonjour, je suis " + this.monNom);
+			oos.writeObject(this.monNom);
 			oos.flush();
 		} catch (IOException e1) {
-			// TODO Auto-generated catch block
 			e1.printStackTrace();
 		}
 
-		// Reception d’un String
-		String res = null;
+		// Reception de Strings
+		String certPEMReceived = null;
+		String nameReceived = null;
 		try {
-			res = (String) ois.readObject();
+			certPEMReceived = (String) ois.readObject();
+			nameReceived = (String) ois.readObject();
 		} catch (ClassNotFoundException | IOException e2) {
-			// TODO Auto-generated catch block
 			e2.printStackTrace();
 		}
+
+		CertificatHolder certHold;
 		try {
-			CertificatHolder certHold = new CertificatHolder(res);
+			certHold = new CertificatHolder(certPEMReceived);
 			System.out.println("Je suis capable d'afficher le certificat que j'ai reçu");
 			System.out.println(certHold.getCertificate());
-		} catch (CertificateException e1) {
-			// TODO Auto-generated catch block
-			e1.printStackTrace();
+		} catch (CertificateException e2) {
+			e2.printStackTrace();
+		}
+		System.out.println("le serveur est :" + nameReceived);// nom du serveur
+
+		ConnexionServer: while (true) {
+			System.out.println("On imagine ici que je n'ai pas le certificat (a implementer)");
+			System.out.println("Voulez vous confirmer la connexion au serveur? (y/n)");
+			String accept = scan.next();
+			switch (accept) {
+			case "y":
+				try {
+					oos.writeObject("connexion acceptée");
+					oos.flush();
+					try {
+						String resAnswer = (String) ois.readObject();
+						System.out.println("le serveur a donné la réponse suivante:" + resAnswer);
+						if (resAnswer.equals("connexion acceptée")) {
+							System.out.println("Nous avons tous les 2 accepté la connexion"
+									+ " nous pouvons echanger nos certificats");
+						}
+						listCA.add(ServerName);
+					} catch (ClassNotFoundException | IOException e1) {
+
+						e1.printStackTrace();
+					}
+				} catch (IOException e1) {
+
+					e1.printStackTrace();
+				}
+				// Cas ou l'utilisateur accepte la connexion
+				break ConnexionServer;
+			case "n":
+				try {
+					oos.writeObject("connexion refusée");
+					oos.flush();
+					System.out.println("J'ai refusé la connexion" + " nous n'echangeons pas nos certificats");
+				} catch (IOException e1) {
+					e1.printStackTrace();
+				}
+				break ConnexionServer;
+			default:
+				System.out.println("Commande inconnue");
+				break;
+			}
 		}
 
 		// Fermeture des flux evolues et natifs
@@ -225,14 +329,14 @@ public class Equipement {
 			NativeIn.close();
 			NativeOut.close();
 		} catch (IOException e) {
-			// Gestion des exceptions
+			e.printStackTrace();
 		}
 
 		// Fermeture de la connexion
 		try {
 			clientSocket.close();
 		} catch (IOException e) {
-			// Gestion des exceptions
+			e.printStackTrace();
 		}
 	}
 }

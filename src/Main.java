@@ -16,13 +16,13 @@ public class Main {
 		Equipement equipement = new Equipement(name, port);
 		equipement.affichage();
 
-		theSpell: while (true) {
+		CLIInput: while (true) {
 			System.out.println("\n" + equipement.monNom() + " >> ");
 			String input = scan.next();
 			switch (input) {
 			case "q":
 				System.out.println("Command line closed");
-				break theSpell;
+				break CLIInput;
 			case "i":
 				equipement.affichage();
 				break;
