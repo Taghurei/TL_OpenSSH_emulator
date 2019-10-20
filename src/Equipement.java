@@ -22,9 +22,9 @@ public class Equipement {
 	private CertificatHolder monCertHolder;
 	private String monNom; // Identite de l’equipement.
 	private int monPort; // Le numéro de port d’ecoute.
-	Set<String> listCA = new HashSet<String>();
+	Set<X509Certificate> listCA = new HashSet<X509Certificate>();
 
-	private Set<String> listDA;
+	Set<X509Certificate> listDA = new HashSet<X509Certificate>();
 
 	Equipement(String nom, int port) {
 		// Constructeur de l’equipement identifie par nom
@@ -104,7 +104,7 @@ public class Equipement {
 		ObjectInputStream ois = null;
 		OutputStream NativeOut = null;
 		ObjectOutputStream oos = null;
-
+		String clientName = null;
 		// Creation de socket (TCP)
 		try {
 			serverSocket = new ServerSocket(this.monPort);
@@ -131,19 +131,48 @@ public class Equipement {
 			// Gestion des exceptions
 		}
 
-		String nameClient = "";
-		// Reception d’un String
+		String certPEMClientReceived = null;
+		CertificatHolder certHold = null;
+		// Reception de Strings
 		try {
-			nameClient = (String) ois.readObject();
-			System.out.println("le client suivant souhaite se connecter:" + nameClient);
-		} catch (ClassNotFoundException | IOException e1) {
-			e1.printStackTrace();
+			certPEMClientReceived = (String) ois.readObject();
+		} catch (ClassNotFoundException | IOException e2) {
+			e2.printStackTrace();
 		}
 
+		try {
+			clientName = (String) ois.readObject();
+		} catch (ClassNotFoundException | IOException e2) {
+			e2.printStackTrace();
+		}
+
+		try {
+			certHold = new CertificatHolder(certPEMClientReceived);
+			System.out.println("Je suis capable d'afficher le certificat que j'ai reçu");
+			System.out.println(certHold.getCertificate());
+			System.out.println(certHold.getCertificate().getPublicKey());
+		} catch (CertificateException e2) {
+			e2.printStackTrace();
+		}
+		CertificatHolder certifServerClient = null;
+		try {
+			certifServerClient = new CertificatHolder(this.monNom, clientName, this.maCle.Privee(),
+					certHold.getCertificate().getPublicKey(), 10);
+			System.out.println(certifServerClient.getCertificate());
+		} catch (CertificateException e2) {
+			// TODO Auto-generated catch block
+			e2.printStackTrace();
+		}
+		try {
+			oos.writeObject(certifServerClient.cert2PEM());
+			oos.flush();
+		} catch (IOException e1) {
+			e1.printStackTrace();
+		}
 		// Emission d’un String
 		try {
 			System.out.println(
-					" J'envoie mon cert au format PEM \n qui juste un DER en base64 avec un header et un footer jolie");
+					" J'envoie mon cert au format PEM \n qui est juste un DER en base64 avec un header et un footer jolie");
 			oos.writeObject(this.monCertHolder.cert2PEM());
 			oos.flush();
 
@@ -153,6 +182,42 @@ public class Equipement {
 		} catch (IOException e1) {
 			e1.printStackTrace();
 		}
+
+		// je recois le certificat avec ma cle publique et je le verifie pour l'ajouter
+		// a ma liste CA
+		String certPEMClientServer = null;
+
+		try {
+			certPEMClientServer= (String) ois.readObject();
+		} catch (ClassNotFoundException | IOException e2) {
+			e2.printStackTrace();
+		}
+		CertificatHolder certHoldtoVerif = null;
+		try {
+			certHoldtoVerif = new CertificatHolder(certPEMClientServer);
+		} catch (CertificateException e2) {
+			e2.printStackTrace();
+		}
+		try {
+			try {
+				if (certHoldtoVerif.verifCertif(certHold.getCertificate().getPublicKey())) {
+					System.out.println("certificat Serveur - Client verifié");
+					try {
+						listCA.add(certHoldtoVerif.getCertificate());
+					} catch (CertificateException e) {
+						// TODO Auto-generated catch block
+						e.printStackTrace();
+					}
+				}
+			} catch (CertException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+		} catch (CertificateException e3) {
+			// TODO Auto-generated catch block
+			e3.printStackTrace();
+		}
+
 		ConnexionClient: while (true) {
 			System.out.println("On imagine ici que je n'ai pas le certificat (a implementer)");
 			System.out.println("Voulez vous accepter la connexion entrante? (y/n)");
@@ -168,7 +233,12 @@ public class Equipement {
 						if (res.equals("connexion acceptée")) {
 							System.out.println("Nous avons tous les 2 accepté la connexion"
 									+ " nous pouvons echanger nos certificats");
-							listCA.add(nameClient);
+							try {
+								listDA.add(certHold.getCertificate());
+							} catch (CertificateException e) {
+								// TODO Auto-generated catch block
+								e.printStackTrace();
+							}
 						} else {
 							System.out.println("le serveur a refusé la connexion");
 						}
@@ -221,6 +291,20 @@ public class Equipement {
 		}
 	}
 
+	/*
+	 * separation serveur - client
+	 * 
+	 * 
+	 * 
+	 * 
+	 * 
+	 * 
+	 * 
+	 * 
+	 * 
+	 * 
+	 */
+
 	public void client(String ServerName, int ServerPort) {
 		// used later in client
 		@SuppressWarnings("resource")
@@ -254,6 +338,7 @@ public class Equipement {
 
 		// Emission d’un String
 		try {
+			oos.writeObject(this.monCertHolder.cert2PEM());
 			oos.writeObject(this.monNom);
 			oos.flush();
 		} catch (IOException e1) {
@@ -261,16 +346,21 @@ public class Equipement {
 		}
 
 		// Reception de Strings
+		String certPEMServerClient = null;
 		String certPEMReceived = null;
 		String nameReceived = null;
 		try {
+			certPEMServerClient = (String) ois.readObject();
 			certPEMReceived = (String) ois.readObject();
 			nameReceived = (String) ois.readObject();
 		} catch (ClassNotFoundException | IOException e2) {
 			e2.printStackTrace();
 		}
-
-		CertificatHolder certHold;
+		// on gere 2 certificats en parallele, le certificat autosigne du serveur
+		// et celui crée avec la cle privee du serveur et notre cle publique qu'on doit
+		// verifier
+		CertificatHolder certHold = null;
+		CertificatHolder certHoldtoVerif = null;
 		try {
 			certHold = new CertificatHolder(certPEMReceived);
 			System.out.println("Je suis capable d'afficher le certificat que j'ai reçu");
@@ -278,7 +368,49 @@ public class Equipement {
 		} catch (CertificateException e2) {
 			e2.printStackTrace();
 		}
-		System.out.println("le serveur est :" + nameReceived);// nom du serveur
+		try {
+			certHoldtoVerif = new CertificatHolder(certPEMServerClient);
+		} catch (CertificateException e2) {
+			e2.printStackTrace();
+		}
+		// si le certificat renvoyé par le serveur est valide on l'ajoute à notre liste
+		// CA
+		try {
+			try {
+				if (certHoldtoVerif.verifCertif(certHold.getCertificate().getPublicKey())) {
+					System.out.println("certificat Serveur - Client verifié");
+					try {
+						listCA.add(certHoldtoVerif.getCertificate());
+					} catch (CertificateException e) {
+						// TODO Auto-generated catch block
+						e.printStackTrace();
+					}
+				}
+			} catch (CertException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+		} catch (CertificateException e3) {
+			// TODO Auto-generated catch block
+			e3.printStackTrace();
+		}
+		// On crée le certificat avec la cle publique du serveur et notre cle privée
+		CertificatHolder certifClientServer = null;
+		try {
+			certifClientServer = new CertificatHolder(this.monNom, nameReceived, this.maCle.Privee(),
+					certHold.getCertificate().getPublicKey(), 10);
+			System.out.println(certifClientServer.getCertificate());
+		} catch (CertificateException e2) {
+			// TODO Auto-generated catch block
+			e2.printStackTrace();
+		}
+		// Emission du certificat
+		try {
+			oos.writeObject(certifClientServer.cert2PEM());
+			oos.flush();
+		} catch (IOException e1) {
+			e1.printStackTrace();
+		}
 
 		ConnexionServer: while (true) {
 			System.out.println("On imagine ici que je n'ai pas le certificat (a implementer)");
@@ -296,7 +428,12 @@ public class Equipement {
 							System.out.println("Nous avons tous les 2 accepté la connexion"
 									+ " nous pouvons echanger nos certificats");
 						}
-						listCA.add(ServerName);
+						try {
+							listDA.add(certHold.getCertificate());
+						} catch (CertificateException e) {
+							// TODO Auto-generated catch block
+							e.printStackTrace();
+						}
 					} catch (ClassNotFoundException | IOException e1) {
 
 						e1.printStackTrace();
