@@ -9,11 +9,18 @@ import java.net.Socket;
 import java.security.PublicKey;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
 import java.util.Scanner;
 import java.util.Set;
-
+import org.bouncycastle.asn1.x509.Certificate;
 import org.bouncycastle.cert.CertException;
+import org.bouncycastle.cert.X509CertificateHolder;
+import org.json.simple.JSONObject;
 
 public class Equipement {
 
@@ -22,9 +29,11 @@ public class Equipement {
 	private CertificatHolder monCertHolder;
 	private String monNom; // Identite de l’equipement.
 	private int monPort; // Le numéro de port d’ecoute.
-	Set<X509Certificate> listCA = new HashSet<X509Certificate>();
-
-	Set<X509Certificate> listDA = new HashSet<X509Certificate>();
+	List<CertificatHolder> listCA = new ArrayList<CertificatHolder>();
+	List<CertificatHolder> listDA = new ArrayList<CertificatHolder>();
+	Map<String, String> mapDAReceived = new HashMap<String, String>();
+	Map<String, String> mapDA = new HashMap<String, String>();
+	Map<String, String> mapCA = new HashMap<String, String>();
 
 	Equipement(String nom, int port) {
 		// Constructeur de l’equipement identifie par nom
@@ -49,16 +58,53 @@ public class Equipement {
 		}
 	}
 
+	public boolean testIfBelongs(CertificatHolder certTempo, Map<String, String> mapDA, Map<String, String> mapCA) {
+		mapDA.putAll(mapCA);
+		Set<Map.Entry<String, String>> listOfDA = mapDA.entrySet();
+		Boolean alreadyBelongs = false;
+		for (Map.Entry<String, String> elementOfDA : listOfDA) {
+			try {
+				if (elementOfDA.getKey().equals(certTempo.getCertificate().getIssuerDN().getName().split("=")[1])
+						&& elementOfDA.getValue().equals(certTempo.getCertificate().getIssuerDN().getName().split("=")[1])) {
+					alreadyBelongs = true;
+				}
+			} catch (CertificateException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+		}
+		return alreadyBelongs;
+
+	}
+
 	public void affichage_da() {
 		// Affichage de la liste des équipements de DA.
 		System.out.println("Affichage des Autorités Dérivées");
-		System.out.println(listDA);
+		System.out.println(mapDA);
+		Iterator<CertificatHolder> itr = listDA.iterator();
+		while (itr.hasNext()) {
+			try {
+				System.out.println(itr.next().getCertificate());
+			} catch (CertificateException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+		}
 	}
 
 	public void affichage_ca() {
 		// Affichage de la liste des équipements de CA.
 		System.out.println("Affichage des Autorités de Certification");
-		System.out.println(listCA);
+		System.out.println(mapCA);
+		Iterator<CertificatHolder> itr = listCA.iterator();
+		while (itr.hasNext()) {
+			try {
+				System.out.println(itr.next().getCertificate());
+			} catch (CertificateException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+		}
 	}
 
 	public void affichage() {
@@ -188,7 +234,7 @@ public class Equipement {
 		String certPEMClientServer = null;
 
 		try {
-			certPEMClientServer= (String) ois.readObject();
+			certPEMClientServer = (String) ois.readObject();
 		} catch (ClassNotFoundException | IOException e2) {
 			e2.printStackTrace();
 		}
@@ -201,12 +247,11 @@ public class Equipement {
 		try {
 			try {
 				if (certHoldtoVerif.verifCertif(certHold.getCertificate().getPublicKey())) {
-					System.out.println("certificat Serveur - Client verifié");
-					try {
-						listCA.add(certHoldtoVerif.getCertificate());
-					} catch (CertificateException e) {
-						// TODO Auto-generated catch block
-						e.printStackTrace();
+					System.out.println("certificat Client - Serveur verifié");
+					if (!testIfBelongs(certHoldtoVerif, mapCA, mapCA)) {
+						listCA.add(certHoldtoVerif);
+						mapCA.put(certHoldtoVerif.getCertificate().getIssuerDN().getName().split("=")[1],
+								certHoldtoVerif.getCertificate().getSubjectDN().getName().split("=")[1]);
 					}
 				}
 			} catch (CertException e) {
@@ -233,11 +278,64 @@ public class Equipement {
 						if (res.equals("connexion acceptée")) {
 							System.out.println("Nous avons tous les 2 accepté la connexion"
 									+ " nous pouvons echanger nos certificats");
+							ArrayList<CertificatHolder> certTemp = new ArrayList<CertificatHolder>();
 							try {
-								listDA.add(certHold.getCertificate());
-							} catch (CertificateException e) {
-								// TODO Auto-generated catch block
-								e.printStackTrace();
+								oos.writeObject(listCA.size() + listDA.size());
+								Iterator<CertificatHolder> i = listCA.iterator();
+								while (i.hasNext())
+									oos.writeObject(i.next().cert2PEM());
+								Iterator<CertificatHolder> j = listDA.iterator();
+								while (j.hasNext())
+									oos.writeObject(j.next().cert2PEM());
+								oos.flush();
+
+							} catch (IOException e1) {
+								e1.printStackTrace();
+							}
+							try {
+								int size = 0;
+								size = (int) ois.readObject();
+								if (size != 0) {
+									for (int i = 0; i < size; i++) {
+										try {
+											certTemp.add(new CertificatHolder((String) ois.readObject()));
+										} catch (CertificateException e) {
+											// TODO Auto-generated catch block
+											e.printStackTrace();
+										}
+									}
+								}
+
+								System.out.println("******");
+
+							} catch (ClassNotFoundException | IOException e2) {
+								e2.printStackTrace();
+							}
+							if (certTemp.size() != 0) {
+								Iterator<CertificatHolder> i = certTemp.iterator();
+								CertificatHolder certReceived = null;
+								while (i.hasNext()) {
+									certReceived = i.next();
+									if (!testIfBelongs(certReceived, mapDA, mapCA)) {
+										listDA.add(certReceived);
+										try {
+											mapDA.put(certReceived.getCertificate().getIssuerDN().getName().split("=")[1],
+													certReceived.getCertificate().getSubjectDN().getName().split("=")[1]);
+										} catch (CertificateException e) {
+											// TODO Auto-generated catch block
+											e.printStackTrace();
+										}
+									} else {
+										try {
+											System.out.println((certReceived.getCertificate().getIssuerDN().getName()
+													+ certReceived.getCertificate().getSubjectDN().getName())
+													+ " already belongs in DA");
+										} catch (CertificateException e) {
+											// TODO Auto-generated catch block
+											e.printStackTrace();
+										}
+									}
+								}
 							}
 						} else {
 							System.out.println("le serveur a refusé la connexion");
@@ -379,11 +477,11 @@ public class Equipement {
 			try {
 				if (certHoldtoVerif.verifCertif(certHold.getCertificate().getPublicKey())) {
 					System.out.println("certificat Serveur - Client verifié");
-					try {
-						listCA.add(certHoldtoVerif.getCertificate());
-					} catch (CertificateException e) {
-						// TODO Auto-generated catch block
-						e.printStackTrace();
+					if (!testIfBelongs(certHoldtoVerif, mapCA, mapCA)) {
+						listCA.add(certHoldtoVerif);
+						
+						mapCA.put(certHoldtoVerif.getCertificate().getIssuerDN().getName().split("=")[1],
+								certHoldtoVerif.getCertificate().getSubjectDN().getName().split("=")[1]);
 					}
 				}
 			} catch (CertException e) {
@@ -428,12 +526,65 @@ public class Equipement {
 							System.out.println("Nous avons tous les 2 accepté la connexion"
 									+ " nous pouvons echanger nos certificats");
 						}
+						ArrayList<CertificatHolder> certTemp = new ArrayList<CertificatHolder>();
 						try {
-							listDA.add(certHold.getCertificate());
-						} catch (CertificateException e) {
-							// TODO Auto-generated catch block
-							e.printStackTrace();
+							int size = 0;
+							size = (int) ois.readObject();
+							if (size != 0) {
+								for (int i = 0; i < size; i++) {
+									try {
+										certTemp.add(new CertificatHolder((String) ois.readObject()));
+									} catch (CertificateException e) {
+										// TODO Auto-generated catch block
+										e.printStackTrace();
+									}
+								}
+							}
+
+						} catch (ClassNotFoundException | IOException e2) {
+							e2.printStackTrace();
 						}
+						try {
+							oos.writeObject(listCA.size() + listDA.size());
+							Iterator<CertificatHolder> i = listCA.iterator();
+							while (i.hasNext())
+								oos.writeObject(i.next().cert2PEM());
+							Iterator<CertificatHolder> j = listDA.iterator();
+							while (j.hasNext())
+								oos.writeObject(j.next().cert2PEM());
+							oos.flush();
+
+						} catch (IOException e1) {
+							e1.printStackTrace();
+						}
+
+						if (certTemp.size() != 0) {
+							Iterator<CertificatHolder> i = certTemp.iterator();
+							CertificatHolder certReceived = null;
+							while (i.hasNext()) {
+								certReceived = i.next();
+								if (!testIfBelongs(certReceived, mapDA, mapCA)) {
+									listDA.add(certReceived);
+									try {
+										mapDA.put(certReceived.getCertificate().getIssuerDN().getName().split("=")[1],
+												certReceived.getCertificate().getSubjectDN().getName().split("=")[1]);
+									} catch (CertificateException e) {
+										// TODO Auto-generated catch block
+										e.printStackTrace();
+									}
+								} else {
+									try {
+										System.out.println((certReceived.getCertificate().getIssuerDN().getName()
+												+ certReceived.getCertificate().getSubjectDN().getName())
+												+ " already belongs in DA");
+									} catch (CertificateException e) {
+										// TODO Auto-generated catch block
+										e.printStackTrace();
+									}
+								}
+							}
+						}
+						System.out.println(mapDA);
 					} catch (ClassNotFoundException | IOException e1) {
 
 						e1.printStackTrace();
@@ -476,4 +627,5 @@ public class Equipement {
 			e.printStackTrace();
 		}
 	}
+
 }

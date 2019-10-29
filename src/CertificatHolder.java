@@ -116,4 +116,8 @@ public class CertificatHolder {
 			throw new RuntimeException("Could not load key pair", e);
 		}
 	}
+	public char[] X509CertificatHolder(Object readObject) {
+		// TODO Auto-generated method stub
+		return null;
+	}
 }
