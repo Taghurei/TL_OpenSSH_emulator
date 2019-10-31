@@ -1,9 +1,13 @@
 
+import java.io.IOException;
+import java.security.cert.CertificateException;
 import java.util.Scanner;
+
+import org.bouncycastle.cert.CertException;
 
 public class Main {
 
-	public static void main(String[] args) {
+	public static void main(String[] args) throws CertificateException, CertException, ClassNotFoundException, IOException {
 
 		// user inputs
 		Scanner scan = new Scanner(System.in);
