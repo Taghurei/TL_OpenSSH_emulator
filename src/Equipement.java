@@ -12,16 +12,11 @@ import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Scanner;
-import java.util.Set;
-import org.bouncycastle.asn1.x509.Certificate;
 import org.bouncycastle.cert.CertException;
-import org.bouncycastle.cert.X509CertificateHolder;
-import org.json.simple.JSONObject;
 
 public class Equipement {
 	private PaireClesRSA maCle; // La paire de cle de l’equipement.
@@ -70,6 +65,48 @@ public class Equipement {
 		}
 		return alreadyBelongs;
 
+	}
+
+	public boolean doWeKnowEachOther(String clientName, Map<String, PublicKey> mapKey, List<CertificatHolder> listCA,
+			List<CertificatHolder> listDA, ObjectInputStream ois, ObjectOutputStream oos)
+			throws IOException, CertificateException, ClassNotFoundException, CertException {
+		boolean weKnowEachOther = false;
+		if (testIfAccept(clientName, mapKey, listCA, listDA)) {
+			oos.writeObject("IKnowYou");
+			String serverAnswer = (String) ois.readObject();
+			if (serverAnswer.equals("IKnowYou")) {
+				weKnowEachOther = true;
+			} else {
+				oos.writeObject(listCA.size() + listDA.size());
+				Iterator<CertificatHolder> i = listCA.iterator();
+				while (i.hasNext())
+					oos.writeObject(i.next().cert2PEM());
+				Iterator<CertificatHolder> j = listDA.iterator();
+				while (j.hasNext())
+					oos.writeObject(j.next().cert2PEM());
+				oos.flush();
+				String serverNewAnswer = (String) ois.readObject();
+				if (serverNewAnswer.equals("youKnowMe")) {
+					weKnowEachOther = true;
+				}
+			}
+		} else {
+			oos.writeObject("IDontKnowYou");
+			String serverAnswer = (String) ois.readObject();
+			if (serverAnswer.equals("IKnowYou")) {
+				ArrayList<CertificatHolder> certTemp = new ArrayList<CertificatHolder>();
+				int size = 0;
+				size = (int) ois.readObject();
+				if (size != 0) {
+					for (int k = 0; k < size; k++) {
+						certTemp.add(new CertificatHolder((String) ois.readObject()));
+					}
+				}
+				oos.writeObject("youKnowMe");
+				weKnowEachOther = true;
+			}
+		}
+		return weKnowEachOther;
 	}
 
 	public boolean testCanBeVerif(CertificatHolder certTempo, Map<String, PublicKey> mapKey)
@@ -164,9 +201,7 @@ public class Equipement {
 		// used later in server
 		@SuppressWarnings("resource")
 		Scanner scan = new Scanner(System.in);
-
 		System.out.println("Je suis un serveur (" + this.monNom + ") qui écoute sur " + this.monPort);
-
 		ServerSocket serverSocket = null;
 		Socket NewServerSocket = null;
 		InputStream NativeIn = null;
@@ -189,20 +224,17 @@ public class Equipement {
 		CertificatHolder certHold = null;
 		// Reception de Strings
 		certPEMClientReceived = (String) ois.readObject();
-
 		clientName = (String) ois.readObject();
 		certHold = new CertificatHolder(certPEMClientReceived);
 		System.out.println("Je suis capable d'afficher le certificat que j'ai reçu");
 		System.out.println(certHold.getCertificate());
 		System.out.println(certHold.getCertificate().getPublicKey());
-
 		CertificatHolder certifServerClient = null;
 		certifServerClient = new CertificatHolder(this.monNom, clientName, this.maCle.Privee(),
 				certHold.getCertificate().getPublicKey(), 10);
 		System.out.println(certifServerClient.getCertificate());
 		oos.writeObject(certifServerClient.cert2PEM());
 		oos.flush();
-
 		// Emission d’un String
 		System.out.println(
 				" J'envoie mon cert au format PEM \n qui est juste un DER en base64 avec un header et un footer jolie");
@@ -215,15 +247,13 @@ public class Equipement {
 		// je recois le certificat avec ma cle publique et je le verifie pour l'ajouter
 		// a ma liste CA
 		String certPEMClientServer = null;
-
 		certPEMClientServer = (String) ois.readObject();
-
 		CertificatHolder certHoldtoVerif = null;
 		certHoldtoVerif = new CertificatHolder(certPEMClientServer);
-
 		ConnexionClient: while (true) {
 			String accept = "";
-			if (testIfAccept(clientName, mapKey, listCA, listDA)) {
+			boolean WeKnowEachOther = doWeKnowEachOther(clientName, mapKey, listCA, listDA,ois,oos);
+			if (WeKnowEachOther) {
 				accept = "y";
 			} else {
 				System.out.println("Voulez vous accepter la connexion entrante? (y/n)");
@@ -231,8 +261,6 @@ public class Equipement {
 			}
 			switch (accept) {
 			case "y":
-				oos.writeObject("connexion acceptée");
-				oos.flush();
 				if (certHoldtoVerif.verifCertif(certHold.getCertificate().getPublicKey())) {
 					System.out.println("certificat Client - Serveur verifié");
 					if (!testIfBelongs(certHoldtoVerif, mapCA, mapCA)
@@ -247,9 +275,19 @@ public class Equipement {
 								+ certHoldtoVerif.getCertificate().getSubjectDN().getName().split("=")[1]);
 					}
 				}
-				String res = (String) ois.readObject();
-				System.out.println("le client a donné la réponse suivante:" + res);
-				if (res.equals("connexion acceptée")) {
+				boolean continueConnexion=false;
+				if (WeKnowEachOther) {
+					continueConnexion=true;
+				} else {
+					oos.writeObject("connexion acceptée");
+					oos.flush();
+					String res = (String) ois.readObject();
+					System.out.println("le client a donné la réponse suivante:" + res);
+					if (res.equals("connexion acceptée")) {
+						continueConnexion=true;
+					}
+				}
+				if (continueConnexion) {
 					System.out.println(
 							"Nous avons tous les 2 accepté la connexion" + " nous pouvons echanger nos certificats");
 					ArrayList<CertificatHolder> certTemp = new ArrayList<CertificatHolder>();
@@ -305,7 +343,7 @@ public class Equipement {
 						}
 					}
 				} else {
-					System.out.println("le serveur a refusé la connexion");
+					System.out.println("le client a refusé la connexion");
 				}
 				// Cas ou l'utilisateur accepte la connexion
 				break ConnexionClient;
@@ -390,7 +428,8 @@ public class Equipement {
 		oos.flush();
 		ConnexionServer: while (true) {
 			String accept = "";
-			if (testIfAccept(nameReceived, mapKey, listCA, listDA)) {
+			boolean WeKnowEachOther = doWeKnowEachOther(nameReceived, mapKey, listCA, listDA,ois,oos);
+			if (WeKnowEachOther) {
 				accept = "y";
 			} else {
 				System.out.println("Voulez vous accepter la connexion entrante? (y/n)");
@@ -398,9 +437,8 @@ public class Equipement {
 			}
 			switch (accept) {
 			case "y":
-				oos.writeObject("connexion acceptée");
 				if (certHoldtoVerif.verifCertif(certHold.getCertificate().getPublicKey())) {
-					System.out.println("certificat Serveur - Client verifié");
+					System.out.println("certificat Client - Serveur verifié");
 					if (!testIfBelongs(certHoldtoVerif, mapCA, mapCA)
 							&& certHoldtoVerif.verifCertif(certHold.getCertificate().getPublicKey())) {
 						listCA.add(certHoldtoVerif);
@@ -413,13 +451,22 @@ public class Equipement {
 								+ certHoldtoVerif.getCertificate().getSubjectDN().getName().split("=")[1]);
 					}
 				}
-				oos.flush();
-				String resAnswer = (String) ois.readObject();
-				System.out.println("le serveur a donné la réponse suivante:" + resAnswer);
-				if (resAnswer.equals("connexion acceptée")) {
+				boolean continueConnexion=false;
+				if (WeKnowEachOther) {
+					continueConnexion=true;
+				} else {
+					oos.writeObject("connexion acceptée");
+					oos.flush();
+					String res = (String) ois.readObject();
+					System.out.println("le client a donné la réponse suivante:" + res);
+					if (res.equals("connexion acceptée")) {
+						continueConnexion=true;
+					}
+				}
+				if (continueConnexion) {
 					System.out.println(
 							"Nous avons tous les 2 accepté la connexion" + " nous pouvons echanger nos certificats");
-				}
+				
 				ArrayList<CertificatHolder> certTemp = new ArrayList<CertificatHolder>();
 				int size = 0;
 				size = (int) ois.readObject();
@@ -473,8 +520,12 @@ public class Equipement {
 					}
 				}
 				System.out.println(mapDA);
-				// Cas ou l'utilisateur accepte la connexion
+				}
+				else {
+					System.out.println("Le serveur a refusé la connexion");
+				}
 				break ConnexionServer;
+
 			case "n":
 				oos.writeObject("connexion refusée");
 				oos.flush();
