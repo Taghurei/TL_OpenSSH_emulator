@@ -67,8 +67,8 @@ public class Equipement {
 
 	}
 
-	public boolean doWeKnowEachOther(String clientName, Map<String, PublicKey> mapKey, List<CertificatHolder> listCA,
-			List<CertificatHolder> listDA, ObjectInputStream ois, ObjectOutputStream oos)
+	public boolean doWeKnowEachOther(String myName, String clientName, Map<String, PublicKey> mapKey,
+			List<CertificatHolder> listCA, List<CertificatHolder> listDA, ObjectInputStream ois, ObjectOutputStream oos)
 			throws IOException, CertificateException, ClassNotFoundException, CertException {
 		boolean weKnowEachOther = false;
 		if (testIfAccept(clientName, mapKey, listCA, listDA)) {
@@ -77,13 +77,27 @@ public class Equipement {
 			if (serverAnswer.equals("IKnowYou")) {
 				weKnowEachOther = true;
 			} else {
-				oos.writeObject(listCA.size() + listDA.size());
-				Iterator<CertificatHolder> i = listCA.iterator();
+				List<CertificatHolder> listOfCertificate= new ArrayList<CertificatHolder>(listCA);
+				listOfCertificate.addAll(listDA);
+				List<String> listToSend = findChaineCertificate(myName, clientName, mapCA, mapDA);
+				System.out.println(listToSend);
+				List<String> certificateToSend = new ArrayList<String>();
+				int index=0;
+				while(index<listToSend.size()-1) {
+					for (int i = 0; i < listOfCertificate.size(); i++) {
+						if(listOfCertificate.get(i).getCertificate().getIssuerDN().getName().split("=")[1]
+								.equals(listToSend.get(index)) && listOfCertificate.get(i).getCertificate().getSubjectDN().getName().split("=")[1]
+												.equals(listToSend.get(index+1))) {
+							certificateToSend.add(listOfCertificate.get(i).cert2PEM());
+							index++;
+							break;
+						}
+					}
+				}
+				oos.writeObject(certificateToSend.size());
+				Iterator<String> i = certificateToSend.iterator();
 				while (i.hasNext())
-					oos.writeObject(i.next().cert2PEM());
-				Iterator<CertificatHolder> j = listDA.iterator();
-				while (j.hasNext())
-					oos.writeObject(j.next().cert2PEM());
+					oos.writeObject(i.next());
 				oos.flush();
 				String serverNewAnswer = (String) ois.readObject();
 				if (serverNewAnswer.equals("youKnowMe")) {
@@ -102,11 +116,61 @@ public class Equipement {
 						certTemp.add(new CertificatHolder((String) ois.readObject()));
 					}
 				}
+				ArrayList<PublicKey> keyToCertify= new ArrayList<PublicKey>();
+				keyToCertify.add(this.maCle.Publique());
+				boolean youKnowMe = true;
+				for (int i = 0; i < certTemp.size(); i++) {
+					if(certTemp.get(i).verifCertif(keyToCertify.get(i))) {
+						keyToCertify.add(certTemp.get(i).getCertificate().getPublicKey());
+					}
+					else {
+						youKnowMe = false;
+					}
+				}
+				if(youKnowMe) {
 				oos.writeObject("youKnowMe");
 				weKnowEachOther = true;
+				}
+				else {
+				oos.writeObject("youDontKnowMe");
+				weKnowEachOther = false;
+				}
 			}
 		}
 		return weKnowEachOther;
+	}
+
+	public List<String> findChaineCertificate(String myName, String clientName, List<String> mapDA, List<String> mapCA)
+			throws CertificateException {
+		List<String> peopleInCertificate = new ArrayList<String>();
+		List<String> listOfAllCertificate = new ArrayList<String>(mapCA);
+		listOfAllCertificate.addAll(mapDA);
+		System.out.println("start to find :");
+		System.out.println(myName);
+		System.out.println(clientName);
+		peopleInCertificate.add(clientName);
+		whileLoop: while (!peopleInCertificate.get(peopleInCertificate.size() - 1).equals(myName)) {
+			for (int i = 0; i < listOfAllCertificate.size(); i++) {
+				if (listOfAllCertificate.get(i).split("issuer : ")[1].split("-")[0]
+						.equals(peopleInCertificate.get(peopleInCertificate.size() - 1))
+						&& listOfAllCertificate.get(i).split("subject : ")[1].split("-")[0].equals(myName)) {
+					peopleInCertificate.add(myName);
+					break whileLoop;
+				}
+			}
+			for (int i = 0; i < listOfAllCertificate.size(); i++) {
+				if (listOfAllCertificate.get(i).split("issuer : ")[1].split("-")[0]
+						.equals(peopleInCertificate.get(peopleInCertificate.size() - 1))) {
+					peopleInCertificate.add(listOfAllCertificate.get(i).split("subject : ")[1].split("-")[0]);
+					System.out.println(listOfAllCertificate.get(i).split("subject : ")[1].split("-")[0]);
+					listOfAllCertificate.remove(i);
+					break;
+				}
+			}
+		}
+		System.out.println("finish to find");
+
+		return peopleInCertificate;
 	}
 
 	public boolean testCanBeVerif(CertificatHolder certTempo, Map<String, PublicKey> mapKey)
@@ -252,7 +316,7 @@ public class Equipement {
 		certHoldtoVerif = new CertificatHolder(certPEMClientServer);
 		ConnexionClient: while (true) {
 			String accept = "";
-			boolean WeKnowEachOther = doWeKnowEachOther(clientName, mapKey, listCA, listDA,ois,oos);
+			boolean WeKnowEachOther = doWeKnowEachOther(this.monNom, clientName, mapKey, listCA, listDA, ois, oos);
 			if (WeKnowEachOther) {
 				accept = "y";
 			} else {
@@ -275,16 +339,16 @@ public class Equipement {
 								+ certHoldtoVerif.getCertificate().getSubjectDN().getName().split("=")[1]);
 					}
 				}
-				boolean continueConnexion=false;
+				boolean continueConnexion = false;
 				if (WeKnowEachOther) {
-					continueConnexion=true;
+					continueConnexion = true;
 				} else {
 					oos.writeObject("connexion acceptée");
 					oos.flush();
 					String res = (String) ois.readObject();
 					System.out.println("le client a donné la réponse suivante:" + res);
 					if (res.equals("connexion acceptée")) {
-						continueConnexion=true;
+						continueConnexion = true;
 					}
 				}
 				if (continueConnexion) {
@@ -428,7 +492,7 @@ public class Equipement {
 		oos.flush();
 		ConnexionServer: while (true) {
 			String accept = "";
-			boolean WeKnowEachOther = doWeKnowEachOther(nameReceived, mapKey, listCA, listDA,ois,oos);
+			boolean WeKnowEachOther = doWeKnowEachOther(this.monNom, nameReceived, mapKey, listCA, listDA, ois, oos);
 			if (WeKnowEachOther) {
 				accept = "y";
 			} else {
@@ -451,77 +515,76 @@ public class Equipement {
 								+ certHoldtoVerif.getCertificate().getSubjectDN().getName().split("=")[1]);
 					}
 				}
-				boolean continueConnexion=false;
+				boolean continueConnexion = false;
 				if (WeKnowEachOther) {
-					continueConnexion=true;
+					continueConnexion = true;
 				} else {
 					oos.writeObject("connexion acceptée");
 					oos.flush();
 					String res = (String) ois.readObject();
 					System.out.println("le client a donné la réponse suivante:" + res);
 					if (res.equals("connexion acceptée")) {
-						continueConnexion=true;
+						continueConnexion = true;
 					}
 				}
 				if (continueConnexion) {
 					System.out.println(
 							"Nous avons tous les 2 accepté la connexion" + " nous pouvons echanger nos certificats");
-				
-				ArrayList<CertificatHolder> certTemp = new ArrayList<CertificatHolder>();
-				int size = 0;
-				size = (int) ois.readObject();
-				if (size != 0) {
-					for (int i = 0; i < size; i++) {
-						certTemp.add(new CertificatHolder((String) ois.readObject()));
-					}
-				}
-				oos.writeObject(listCA.size() + listDA.size());
-				Iterator<CertificatHolder> i = listCA.iterator();
-				while (i.hasNext())
-					oos.writeObject(i.next().cert2PEM());
-				Iterator<CertificatHolder> j = listDA.iterator();
-				while (j.hasNext())
-					oos.writeObject(j.next().cert2PEM());
-				oos.flush();
-				while (certTemp.size() != 0) {
-					System.out.println(certTemp.size());
-					Iterator<CertificatHolder> h = certTemp.iterator();
-					CertificatHolder certReceived = null;
-					System.out.println(h.hasNext());
-					while (h.hasNext() && certTemp.size() != 0) {
-						certReceived = h.next();
-						if (!testIfBelongs(certReceived, mapDA, mapCA)) {
-							if (testCanBeVerif(certReceived, mapKey)) {
-								if (testIfVerif(certReceived, mapKey)) {
-									mapKey.put(certReceived.getCertificate().getSubjectDN().getName().split("=")[1],
-											certReceived.getCertificate().getPublicKey());
-									mapDA.add("issuer : "
-											+ certReceived.getCertificate().getIssuerDN().getName().split("=")[1]
-											+ "- subject : "
-											+ certReceived.getCertificate().getSubjectDN().getName().split("=")[1]);
-									certTemp.remove(certReceived);
-									listDA.add(certReceived);
-									System.out.println(listDA);
-									System.out.println(mapDA);
-									break;
-								} else {
-									certTemp.remove(certReceived);
-									System.out.println("certificat invalid");
-									break;
-								}
-							}
-						} else {
-							certTemp.remove(certReceived);
-							System.out.println((certReceived.getCertificate().getIssuerDN().getName()
-									+ certReceived.getCertificate().getSubjectDN().getName())
-									+ " already belongs in DA");
-							break;
+
+					ArrayList<CertificatHolder> certTemp = new ArrayList<CertificatHolder>();
+					int size = 0;
+					size = (int) ois.readObject();
+					if (size != 0) {
+						for (int i = 0; i < size; i++) {
+							certTemp.add(new CertificatHolder((String) ois.readObject()));
 						}
 					}
-				}
-				System.out.println(mapDA);
-				}
-				else {
+					oos.writeObject(listCA.size() + listDA.size());
+					Iterator<CertificatHolder> i = listCA.iterator();
+					while (i.hasNext())
+						oos.writeObject(i.next().cert2PEM());
+					Iterator<CertificatHolder> j = listDA.iterator();
+					while (j.hasNext())
+						oos.writeObject(j.next().cert2PEM());
+					oos.flush();
+					while (certTemp.size() != 0) {
+						System.out.println(certTemp.size());
+						Iterator<CertificatHolder> h = certTemp.iterator();
+						CertificatHolder certReceived = null;
+						System.out.println(h.hasNext());
+						while (h.hasNext() && certTemp.size() != 0) {
+							certReceived = h.next();
+							if (!testIfBelongs(certReceived, mapDA, mapCA)) {
+								if (testCanBeVerif(certReceived, mapKey)) {
+									if (testIfVerif(certReceived, mapKey)) {
+										mapKey.put(certReceived.getCertificate().getSubjectDN().getName().split("=")[1],
+												certReceived.getCertificate().getPublicKey());
+										mapDA.add("issuer : "
+												+ certReceived.getCertificate().getIssuerDN().getName().split("=")[1]
+												+ "- subject : "
+												+ certReceived.getCertificate().getSubjectDN().getName().split("=")[1]);
+										certTemp.remove(certReceived);
+										listDA.add(certReceived);
+										System.out.println(listDA);
+										System.out.println(mapDA);
+										break;
+									} else {
+										certTemp.remove(certReceived);
+										System.out.println("certificat invalid");
+										break;
+									}
+								}
+							} else {
+								certTemp.remove(certReceived);
+								System.out.println((certReceived.getCertificate().getIssuerDN().getName()
+										+ certReceived.getCertificate().getSubjectDN().getName())
+										+ " already belongs in DA");
+								break;
+							}
+						}
+					}
+					System.out.println(mapDA);
+				} else {
 					System.out.println("Le serveur a refusé la connexion");
 				}
 				break ConnexionServer;
